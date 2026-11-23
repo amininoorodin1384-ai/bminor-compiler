@@ -1,16 +1,16 @@
 # B-Minor Compiler Front-End
 
-پروژهٔ آموزشی سه‌فازه برای زبان B-Minor، با پیاده‌سازی C++17 و یک مخزن Git پیوسته.
+An educational, three-phase compiler project for the B-Minor language, implemented in C++17 and developed in one continuous Git repository.
 
-## وضعیت فعلی
+## Current status
 
-- Lexer شناسه‌ها، کلیدواژه‌ها، فاصله‌ها، commentها، اعداد صحیح، رشته‌ها، کاراکترها، عملگرها و جداکننده‌ها را شناسایی می‌کند.
-- اجرای `bminor --tokens <source-file>` توکن‌ها را با موقعیت منبع نمایش می‌دهد؛ `bminor --parse <source-file>` برنامه را parse می‌کند، خطاها را گزارش می‌دهد و AST را چاپ می‌کند.
-- آزمون‌های فعلی در `tests/lexer_tests.cpp` هستند.
-- Parser بازگشتی نزولی اکنون عبارت‌ها، اعلان‌های متغیر/تابع، prototypeها، بلوک‌ها و statementهای اصلی را به AST تبدیل می‌کند.
-- بازیابی panic-mode پایه پیاده‌سازی شده است؛ highlighter هنوز باقی است.
+- The Lexer recognizes identifiers, keywords, whitespace, comments, integer, string and character literals, operators, and separators.
+- `bminor --tokens <source-file>` prints tokens with source locations. `bminor --parse <source-file>` parses a program, reports syntax errors, and prints its AST.
+- The recursive-descent Parser builds ASTs for expressions, variable and function declarations, prototypes, blocks, and the core statements. Basic panic-mode error recovery is implemented.
+- The syntax highlighter produces ANSI terminal output and standalone HTML/CSS. It uses AST information to distinguish function, variable, and parameter names.
+- Unit tests are in `tests/`; test executables are separate CMake targets.
 
-## ساخت و اجرا
+## Build and run
 
 ```sh
 cmake -S . -B build
@@ -18,27 +18,29 @@ cmake --build build
 ./build/bminor --help
 ./build/bminor --tokens tests/lexer-smoke.bm
 ./build/bminor --parse tests/program-smoke.bm
+./build/bminor --highlight-ansi tests/program-smoke.bm
+./build/bminor --highlight-html tests/program-smoke.bm program-highlight.html
 ```
 
-در CLion، پروژه را از پوشه‌ای باز کن که `CMakeLists.txt` در آن قرار دارد. برای اجرای آزمون‌ها، هدف `bminor_tests` را انتخاب کن.
+In CLion, open the directory containing `CMakeLists.txt`. Select the relevant target (`bminor`, `bminor_tests`, `bminor_parser_tests`, or `bminor_highlighter_tests`) to run the program or a test suite.
 
-## ساختار پروژه
+## Project structure
 
-- `include/bminor/` — سرآیندهای Lexer و توکن‌ها
-- `src/` — پیاده‌سازی برنامه و Lexer
-- `tests/` — آزمون‌ها و فایل‌های نمونهٔ B-Minor
-- `docs/lexical-rules.fa.md` — یادداشت موقت قواعد Lexer؛ مشخصات نهایی نیز در همین README تجمیع می‌شود
+- `include/bminor/` — public headers for tokens, AST, Lexer, Parser, and highlighter
+- `src/` — application and front-end implementations
+- `tests/` — unit tests and B-Minor smoke-test programs
+- `docs/lexical-rules.fa.md` — implementation notes for the Lexer
 
-## قواعد واژگانی
+## Lexical rules
 
-در این بخش `LETTER` یعنی حرف ASCII، `DIGIT` یعنی رقم ده‌دهی، و طول شناسه حداکثر ۲۵۶ بایت است.
+In this section, `LETTER` means an ASCII letter, `DIGIT` means a decimal digit, and an identifier is limited to 256 bytes.
 
 ```text
-LETTER             = [A-Z] | [a-z]
-DIGIT              = [0-9]
-IDENTIFIER         = (LETTER | _) (LETTER | DIGIT | _){0,255}
-INTEGER_LITERAL    = DIGIT+
-STRING_LITERAL     = " (ordinary-string-character | escape-sequence)* "
+LETTER              = [A-Z] | [a-z]
+DIGIT               = [0-9]
+IDENTIFIER          = (LETTER | _) (LETTER | DIGIT | _){0,255}
+INTEGER_LITERAL     = DIGIT+
+STRING_LITERAL      = " (ordinary-string-character | escape-sequence)* "
 CHARACTER_LITERAL   = ' (ordinary-character | escape-sequence) '
 ESCAPE_SEQUENCE     = backslash followed by any non-newline character
 LINE_COMMENT        = // followed by characters through end of line
@@ -46,7 +48,7 @@ BLOCK_COMMENT       = /* followed by the first subsequent */
 WHITESPACE          = space | tab | LF | CR
 ```
 
-`\n` and `\0` are the newline and null escapes. A backslash followed by another character denotes that character. A string value may contain at most ۲۵۶ characters; each escape sequence counts as one value character. A character literal must denote exactly one character. The Lexer retains the original lexeme, including quotes and escape spelling.
+`\n` and `\0` are the newline and null escapes. A backslash followed by another character denotes that character. A string value may contain at most 256 characters; each escape sequence counts as one value character. A character literal must denote exactly one character. The Lexer retains the original lexeme, including quotes and escape spelling.
 
 Keywords are `array`, `boolean`, `char`, `else`, `false`, `for`, `function`, `if`, `integer`, `print`, `return`, `string`, `true`, `void`, and `while`.
 
@@ -99,7 +101,7 @@ logical_or_expression     ::= logical_and_expression
                               { "||" logical_and_expression } ;
 logical_and_expression    ::= comparison_expression
                               { "&&" comparison_expression } ;
-comparison_expression    ::= additive_expression
+comparison_expression     ::= additive_expression
                               { ( "<" | "<=" | "=<" | ">" | ">=" | "==" | "!=" )
                                 additive_expression } ;
 additive_expression       ::= multiplicative_expression
@@ -131,4 +133,4 @@ primary_expression        ::= IDENTIFIER
 - The explicit `=<` spelling is accepted as an alias for the reference's `<=` operator.
 - Array variables use a fixed integer size; array parameters use `[]` without a size.
 - A complete program's required `main` function, constant-only global initialization, and type compatibility are semantic checks, not grammar productions.
-- AST nodes store their kind, source location, value, children, and an optional type annotation that starts empty. The recursive-descent Parser now handles expressions, declarations, prototypes/definitions, blocks, and the core statements; highlighter integration remains.
+- AST nodes store their kind, source location, value, children, and an optional type annotation that starts empty. The Parser handles expressions, declarations, prototypes and definitions, blocks, and the core statements. The highlighter consumes token and AST information to generate ANSI and HTML output.

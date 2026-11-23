@@ -1,3 +1,4 @@
+#include "bminor/highlighter.hpp"
 #include "bminor/lexer.hpp"
 #include "bminor/parser.hpp"
 
@@ -15,7 +16,9 @@ void print_usage(const std::string& program_name) {
               << "Usage:\n"
               << "  " << program_name << " --help\n"
               << "  " << program_name << " --tokens <source-file>\n"
-              << "  " << program_name << " --parse <source-file>\n";
+              << "  " << program_name << " --parse <source-file>\n"
+              << "  " << program_name << " --highlight-ansi <source-file>\n"
+              << "  " << program_name << " --highlight-html <source-file> [output.html]\n";
 }
 
 std::string escape_lexeme(const std::string& text) {
@@ -70,12 +73,17 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
-    if (argc != 3) {
+    if (argc < 3 || argc > 4) {
         print_usage(argv[0]);
         return 2;
     }
 
     const std::string mode = argv[1];
+    const bool writes_html_file = mode == "--highlight-html" && argc == 4;
+    if (argc == 4 && !writes_html_file) {
+        print_usage(argv[0]);
+        return 2;
+    }
     const std::string filename = argv[2];
     std::string source;
     if (!read_source_file(filename, source)) {
@@ -98,6 +106,47 @@ int main(int argc, char* argv[]) {
             }
         }
         return has_invalid_token ? 1 : 0;
+    }
+
+    if (mode == "--highlight-ansi" || mode == "--highlight-html") {
+        bminor::Parser parser(tokens);
+        const bminor::AstNodePtr program = parser.parse_program();
+        for (const bminor::Token& token : tokens) {
+            if (token.type == bminor::TokenType::Invalid) {
+                std::cerr << token.location.filename << ':'
+                          << token.location.line << ':'
+                          << token.location.column
+                          << ": error: invalid token \""
+                          << escape_lexeme(token.lexeme) << "\"\n";
+                has_invalid_token = true;
+            }
+        }
+        for (const bminor::ParseError& error : parser.errors()) {
+            std::cerr << error.location.filename << ':'
+                      << error.location.line << ':'
+                      << error.location.column
+                      << ": error: " << error.message << '\n';
+        }
+
+        const std::string highlighted = mode == "--highlight-html"
+            ? bminor::highlight_html(source, tokens, program.get())
+            : bminor::highlight_ansi(source, tokens, program.get());
+        if (writes_html_file) {
+            const std::string output_filename = argv[3];
+            std::ofstream output(output_filename, std::ios::binary);
+            if (!output) {
+                std::cerr << "Cannot create HTML output file: " << output_filename << '\n';
+                return 1;
+            }
+            output << highlighted;
+            if (!output) {
+                std::cerr << "Failed while writing HTML output file: " << output_filename << '\n';
+                return 1;
+            }
+        } else {
+            std::cout << highlighted;
+        }
+        return has_invalid_token || !parser.errors().empty() ? 1 : 0;
     }
 
     if (mode == "--parse") {
