@@ -7,8 +7,8 @@
 - Lexer شناسه‌ها، کلیدواژه‌ها، فاصله‌ها، commentها، اعداد صحیح، رشته‌ها، کاراکترها، عملگرها و جداکننده‌ها را شناسایی می‌کند.
 - اجرای `bminor --tokens <source-file>` توکن‌ها را همراه با موقعیت منبع نمایش می‌دهد.
 - آزمون‌های فعلی در `tests/lexer_tests.cpp` هستند.
-- مدل پایهٔ AST آماده است و Parser بازگشتی نزولی فعلاً عبارت‌ها را با تقدم عملگرها parse می‌کند.
-- Parser اعلان‌ها و statementها، بازیابی خطای نحوی و highlighter هنوز تکمیل نشده‌اند.
+- Parser بازگشتی نزولی اکنون عبارت‌ها، اعلان‌های متغیر/تابع، prototypeها، بلوک‌ها و statementهای اصلی را به AST تبدیل می‌کند.
+- بازیابی panic-mode پایه پیاده‌سازی شده است؛ highlighter هنوز باقی است.
 
 ## ساخت و اجرا
 
@@ -130,4 +130,4 @@ primary_expression        ::= IDENTIFIER
 - The explicit `=<` spelling is accepted as an alias for the reference's `<=` operator.
 - Array variables use a fixed integer size; array parameters use `[]` without a size.
 - A complete program's required `main` function, constant-only global initialization, and type compatibility are semantic checks, not grammar productions.
-- AST nodes store their kind, source location, value, children, and an optional type annotation that starts empty. The recursive-descent Parser currently handles expressions; declaration and statement productions remain to be connected.
+- AST nodes store their kind, source location, value, children, and an optional type annotation that starts empty. The recursive-descent Parser now handles expressions, declarations, prototypes/definitions, blocks, and the core statements; highlighter integration remains.

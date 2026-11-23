@@ -81,6 +81,50 @@ void test_logical_precedence_and_parse_error() {
     require(errors[0].location.filename == "expression.bm", "parse error has source filename");
 }
 
+void test_program_declarations_and_statements() {
+    const std::string source =
+        "global: integer = 7;\n"
+        "printarray: function void ( a: array [] integer );\n"
+        "main: function integer () = {\n"
+        "  i: integer = 0;\n"
+        "  for (i=0; i<3; i++) { print i; }\n"
+        "  if (true) return 0; else return 1;\n"
+        "}\n";
+    bminor::Lexer lexer(source, "program.bm");
+    bminor::Parser parser(lexer.scan_all());
+    bminor::AstNodePtr program = parser.parse_program();
+
+    require(program != nullptr, "program AST is returned");
+    require(program->kind == bminor::AstKind::Program, "program root kind");
+    require(parser.errors().empty(), "valid program has no parser errors");
+    require(program->children.size() == 3, "program contains three declarations");
+    require(program->children[0]->kind == bminor::AstKind::VariableDeclaration,
+            "global variable declaration is parsed");
+    require(program->children[1]->kind == bminor::AstKind::FunctionPrototype,
+            "function prototype is parsed");
+    require(program->children[2]->kind == bminor::AstKind::FunctionDeclaration,
+            "function definition is parsed");
+    require(program->children[2]->children.back()->kind == bminor::AstKind::BlockStatement,
+            "function body is a block");
+}
+
+void test_program_error_recovery() {
+    const std::string source =
+        "f: function integer () = {\n"
+        "  return (1 + );\n"
+        "  return 2;\n"
+        "}\n"
+        "after: integer = 3;\n";
+    bminor::Lexer lexer(source, "recovery.bm");
+    bminor::Parser parser(lexer.scan_all());
+    bminor::AstNodePtr program = parser.parse_program();
+
+    require(program != nullptr, "parser returns a partial program after an error");
+    require(!parser.errors().empty(), "malformed statement reports a parser error");
+    require(program->children.size() == 2, "parser continues with later declaration");
+    require(program->children.back()->value == "after", "later declaration is recovered");
+}
+
 }
 
 int main() {
@@ -88,6 +132,8 @@ int main() {
     test_assignment_and_exponent_associativity();
     test_postfix_call_and_index();
     test_logical_precedence_and_parse_error();
-    std::cout << "Parser expression tests passed.\n";
+    test_program_declarations_and_statements();
+    test_program_error_recovery();
+    std::cout << "Parser tests passed.\n";
     return 0;
 }

@@ -40,6 +40,11 @@ const Token& Parser::previous() const {
     return index_ == 0 ? tokens_.front() : tokens_[index_ - 1];
 }
 
+const Token& Parser::peek(std::size_t distance) const {
+    const std::size_t position = index_ + distance;
+    return position < tokens_.size() ? tokens_[position] : tokens_.back();
+}
+
 bool Parser::at_end() const {
     return current().type == TokenType::EndOfFile;
 }
@@ -71,6 +76,42 @@ void Parser::report(const std::string& message) {
     errors_.push_back(ParseError{current().location, message});
 }
 
+bool Parser::expect_lexeme(const std::string& lexeme, const std::string& message) {
+    if (match_lexeme(lexeme)) {
+        return true;
+    }
+    report(message);
+    return false;
+}
+
+bool Parser::looks_like_variable_declaration() const {
+    return check(TokenType::Identifier) && peek(1).lexeme == ":";
+}
+
+void Parser::synchronize_statement() {
+    while (!at_end()) {
+        if (previous().lexeme == ";") {
+            return;
+        }
+        if (check_lexeme("}") || check_lexeme("if") || check_lexeme("return")) {
+            return;
+        }
+        advance();
+    }
+}
+
+void Parser::synchronize_declaration() {
+    while (!at_end()) {
+        if (previous().lexeme == ";") {
+            return;
+        }
+        if (looks_like_variable_declaration()) {
+            return;
+        }
+        advance();
+    }
+}
+
 const std::vector<ParseError>& Parser::errors() const {
     return errors_;
 }
@@ -81,6 +122,394 @@ AstNodePtr Parser::parse_expression() {
         report("Unexpected token after expression.");
     }
     return expression;
+}
+
+AstNodePtr Parser::parse_program() {
+    const SourceLocation location = current().location;
+    AstNodePtr program = make_ast_node(AstKind::Program, location);
+
+    while (!at_end()) {
+        const std::size_t start = index_;
+        if (looks_like_variable_declaration()) {
+            AstNodePtr declaration = parse_declaration();
+            if (declaration) {
+                program->children.push_back(std::move(declaration));
+            } else {
+                synchronize_declaration();
+            }
+        } else {
+            report("Expected a top-level declaration.");
+            synchronize_declaration();
+        }
+        if (index_ == start && !at_end()) {
+            advance();
+        }
+    }
+
+    return program;
+}
+
+AstNodePtr Parser::parse_declaration() {
+    const Token name = advance();
+    if (!expect_lexeme(":", "Expected ':' after declaration name.")) {
+        return nullptr;
+    }
+
+    if (match_lexeme("function")) {
+        return parse_function_declaration(name);
+    }
+
+    AstNodePtr type = parse_type(true);
+    if (!type) {
+        return nullptr;
+    }
+
+    AstNodePtr declaration = make_ast_node(AstKind::VariableDeclaration,
+                                           name.location, name.lexeme);
+    declaration->children.push_back(std::move(type));
+    if (match_lexeme("=")) {
+        AstNodePtr initializer = parse_initializer();
+        if (!initializer) {
+            return nullptr;
+        }
+        declaration->children.push_back(std::move(initializer));
+    }
+    if (!expect_lexeme(";", "Expected ';' after variable declaration.")) {
+        return nullptr;
+    }
+    return declaration;
+}
+
+AstNodePtr Parser::parse_variable_declaration() {
+    const Token name = advance();
+    if (!expect_lexeme(":", "Expected ':' after local variable name.")) {
+        return nullptr;
+    }
+
+    AstNodePtr type = parse_type(true);
+    if (!type) {
+        return nullptr;
+    }
+
+    AstNodePtr declaration = make_ast_node(AstKind::VariableDeclaration,
+                                           name.location, name.lexeme);
+    declaration->children.push_back(std::move(type));
+    if (match_lexeme("=")) {
+        AstNodePtr initializer = parse_initializer();
+        if (!initializer) {
+            return nullptr;
+        }
+        declaration->children.push_back(std::move(initializer));
+    }
+    if (!expect_lexeme(";", "Expected ';' after local variable declaration.")) {
+        return nullptr;
+    }
+    return declaration;
+}
+
+AstNodePtr Parser::parse_function_declaration(const Token& name) {
+    AstNodePtr return_type;
+    if (match_lexeme("void")) {
+        const Token& token = previous();
+        return_type = make_ast_node(AstKind::AtomicType, token.location, token.lexeme);
+    } else {
+        return_type = parse_atomic_type();
+    }
+    if (!return_type) {
+        return nullptr;
+    }
+    if (!expect_lexeme("(", "Expected '(' after function return type.")) {
+        return nullptr;
+    }
+
+    std::vector<AstNodePtr> parameters;
+    if (!check_lexeme(")")) {
+        do {
+            if (!check(TokenType::Identifier)) {
+                report("Expected a parameter name.");
+                synchronize_statement();
+                return nullptr;
+            }
+            const Token parameter_name = advance();
+            if (!expect_lexeme(":", "Expected ':' after parameter name.")) {
+                return nullptr;
+            }
+            AstNodePtr parameter_type = parse_type(false);
+            if (!parameter_type) {
+                return nullptr;
+            }
+            AstNodePtr parameter = make_ast_node(AstKind::Parameter,
+                                                 parameter_name.location,
+                                                 parameter_name.lexeme);
+            parameter->children.push_back(std::move(parameter_type));
+            parameters.push_back(std::move(parameter));
+        } while (match_lexeme(","));
+    }
+
+    if (!expect_lexeme(")", "Expected ')' after function parameters.")) {
+        return nullptr;
+    }
+
+    if (match_lexeme(";")) {
+        AstNodePtr prototype = make_ast_node(AstKind::FunctionPrototype,
+                                             name.location, name.lexeme);
+        prototype->children.push_back(std::move(return_type));
+        for (AstNodePtr& parameter : parameters) {
+            prototype->children.push_back(std::move(parameter));
+        }
+        return prototype;
+    }
+
+    if (!expect_lexeme("=", "Expected ';' or '= block' after function signature.")) {
+        return nullptr;
+    }
+    AstNodePtr body = parse_block();
+    if (!body) {
+        return nullptr;
+    }
+
+    AstNodePtr function = make_ast_node(AstKind::FunctionDeclaration,
+                                        name.location, name.lexeme);
+    function->children.push_back(std::move(return_type));
+    for (AstNodePtr& parameter : parameters) {
+        function->children.push_back(std::move(parameter));
+    }
+    function->children.push_back(std::move(body));
+    return function;
+}
+
+AstNodePtr Parser::parse_type(bool allow_array_size) {
+    if (!match_lexeme("array")) {
+        return parse_atomic_type();
+    }
+
+    const Token array_token = previous();
+    if (!expect_lexeme("[", "Expected '[' after array type.")) {
+        return nullptr;
+    }
+
+    std::string size;
+    if (allow_array_size) {
+        if (!check(TokenType::IntegerLiteral)) {
+            report("Expected a fixed integer size for array type.");
+            return nullptr;
+        }
+        size = advance().lexeme;
+    }
+
+    if (!expect_lexeme("]", "Expected ']' after array size.")) {
+        return nullptr;
+    }
+    AstNodePtr element_type = parse_atomic_type();
+    if (!element_type) {
+        return nullptr;
+    }
+
+    AstNodePtr type = make_ast_node(AstKind::ArrayType, array_token.location, size);
+    type->children.push_back(std::move(element_type));
+    return type;
+}
+
+AstNodePtr Parser::parse_atomic_type() {
+    if (check_lexeme("integer") || check_lexeme("boolean") ||
+        check_lexeme("char") || check_lexeme("string")) {
+        const Token type_token = advance();
+        return make_ast_node(AstKind::AtomicType, type_token.location, type_token.lexeme);
+    }
+    report("Expected an atomic type.");
+    return nullptr;
+}
+
+AstNodePtr Parser::parse_initializer() {
+    if (!match_lexeme("{")) {
+        return parse_assignment();
+    }
+
+    const Token opening_brace = previous();
+    AstNodePtr initializer = make_ast_node(AstKind::ArrayInitializer,
+                                           opening_brace.location);
+    if (check_lexeme("}")) {
+        report("Array initializer must contain at least one expression.");
+        return nullptr;
+    }
+
+    initializer->children.push_back(parse_assignment());
+    while (match_lexeme(",")) {
+        initializer->children.push_back(parse_assignment());
+    }
+    for (const AstNodePtr& element : initializer->children) {
+        if (!element) {
+            return nullptr;
+        }
+    }
+    if (!expect_lexeme("}", "Expected '}' after array initializer.")) {
+        return nullptr;
+    }
+    return initializer;
+}
+
+AstNodePtr Parser::parse_block() {
+    if (!expect_lexeme("{", "Expected '{' to begin block.")) {
+        return nullptr;
+    }
+
+    const Token opening_brace = previous();
+    AstNodePtr block = make_ast_node(AstKind::BlockStatement, opening_brace.location);
+    while (!at_end() && !check_lexeme("}")) {
+        const std::size_t start = index_;
+        AstNodePtr item = looks_like_variable_declaration()
+            ? parse_variable_declaration()
+            : parse_statement();
+        if (item) {
+            block->children.push_back(std::move(item));
+        } else {
+            synchronize_statement();
+        }
+        if (index_ == start && !at_end() && !check_lexeme("}")) {
+            advance();
+        }
+    }
+
+    if (!expect_lexeme("}", "Expected '}' after block.")) {
+        return nullptr;
+    }
+    return block;
+}
+
+AstNodePtr Parser::parse_statement() {
+    if (check_lexeme("{")) {
+        return parse_block();
+    }
+    if (match_lexeme("if")) {
+        return parse_if_statement();
+    }
+    if (match_lexeme("for")) {
+        return parse_for_statement();
+    }
+    if (match_lexeme("print")) {
+        return parse_print_statement();
+    }
+    if (match_lexeme("return")) {
+        return parse_return_statement();
+    }
+    if (check(TokenType::Invalid)) {
+        report("Invalid token in statement.");
+        advance();
+        return nullptr;
+    }
+
+    const SourceLocation location = current().location;
+    AstNodePtr expression = parse_assignment();
+    if (!expression) {
+        return nullptr;
+    }
+    if (!expect_lexeme(";", "Expected ';' after expression statement.")) {
+        return nullptr;
+    }
+    AstNodePtr statement = make_ast_node(AstKind::ExpressionStatement, location);
+    statement->children.push_back(std::move(expression));
+    return statement;
+}
+
+AstNodePtr Parser::parse_if_statement() {
+    const Token keyword = previous();
+    if (!expect_lexeme("(", "Expected '(' after if.")) {
+        return nullptr;
+    }
+    AstNodePtr condition = parse_assignment();
+    if (!expect_lexeme(")", "Expected ')' after if condition.")) {
+        return nullptr;
+    }
+    AstNodePtr then_branch = parse_statement();
+    if (!condition || !then_branch) {
+        return nullptr;
+    }
+
+    AstNodePtr statement = make_ast_node(AstKind::IfStatement, keyword.location);
+    statement->children.push_back(std::move(condition));
+    statement->children.push_back(std::move(then_branch));
+    if (match_lexeme("else")) {
+        AstNodePtr else_branch = parse_statement();
+        if (!else_branch) {
+            return nullptr;
+        }
+        statement->children.push_back(std::move(else_branch));
+    }
+    return statement;
+}
+
+AstNodePtr Parser::parse_for_statement() {
+    const Token keyword = previous();
+    if (!expect_lexeme("(", "Expected '(' after for.")) {
+        return nullptr;
+    }
+
+    AstNodePtr initializer = check_lexeme(";")
+        ? make_ast_node(AstKind::Empty, current().location)
+        : parse_assignment();
+    if (!expect_lexeme(";", "Expected ';' after for initializer.")) {
+        return nullptr;
+    }
+
+    AstNodePtr condition = check_lexeme(";")
+        ? make_ast_node(AstKind::Empty, current().location)
+        : parse_assignment();
+    if (!expect_lexeme(";", "Expected ';' after for condition.")) {
+        return nullptr;
+    }
+
+    AstNodePtr update = check_lexeme(")")
+        ? make_ast_node(AstKind::Empty, current().location)
+        : parse_assignment();
+    if (!expect_lexeme(")", "Expected ')' after for clauses.")) {
+        return nullptr;
+    }
+
+    AstNodePtr body = parse_statement();
+    if (!initializer || !condition || !update || !body) {
+        return nullptr;
+    }
+
+    AstNodePtr statement = make_ast_node(AstKind::ForStatement, keyword.location);
+    statement->children.push_back(std::move(initializer));
+    statement->children.push_back(std::move(condition));
+    statement->children.push_back(std::move(update));
+    statement->children.push_back(std::move(body));
+    return statement;
+}
+
+AstNodePtr Parser::parse_print_statement() {
+    const Token keyword = previous();
+    AstNodePtr statement = make_ast_node(AstKind::PrintStatement, keyword.location);
+    statement->children.push_back(parse_assignment());
+    while (match_lexeme(",")) {
+        statement->children.push_back(parse_assignment());
+    }
+    for (const AstNodePtr& expression : statement->children) {
+        if (!expression) {
+            return nullptr;
+        }
+    }
+    if (!expect_lexeme(";", "Expected ';' after print statement.")) {
+        return nullptr;
+    }
+    return statement;
+}
+
+AstNodePtr Parser::parse_return_statement() {
+    const Token keyword = previous();
+    AstNodePtr statement = make_ast_node(AstKind::ReturnStatement, keyword.location);
+    if (!check_lexeme(";")) {
+        AstNodePtr expression = parse_assignment();
+        if (!expression) {
+            return nullptr;
+        }
+        statement->children.push_back(std::move(expression));
+    }
+    if (!expect_lexeme(";", "Expected ';' after return statement.")) {
+        return nullptr;
+    }
+    return statement;
 }
 
 AstNodePtr Parser::parse_assignment() {

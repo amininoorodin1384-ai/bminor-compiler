@@ -12,8 +12,10 @@ namespace bminor {
 
 enum class AstKind {
     Program,
+    Empty,
     VariableDeclaration,
     FunctionDeclaration,
+    FunctionPrototype,
     Parameter,
     AtomicType,
     ArrayType,
@@ -57,8 +59,10 @@ inline AstNodePtr make_ast_node(AstKind kind, SourceLocation location, std::stri
 inline const char* ast_kind_name(AstKind kind) {
     switch (kind) {
         case AstKind::Program: return "Program";
+        case AstKind::Empty: return "Empty";
         case AstKind::VariableDeclaration: return "VariableDeclaration";
         case AstKind::FunctionDeclaration: return "FunctionDeclaration";
+        case AstKind::FunctionPrototype: return "FunctionPrototype";
         case AstKind::Parameter: return "Parameter";
         case AstKind::AtomicType: return "AtomicType";
         case AstKind::ArrayType: return "ArrayType";
