@@ -48,6 +48,8 @@ const char* token_type_name(TokenType type) {
         case TokenType::IntegerLiteral: return "INTEGER_LITERAL";
         case TokenType::StringLiteral: return "STRING_LITERAL";
         case TokenType::CharacterLiteral: return "CHARACTER_LITERAL";
+        case TokenType::Operator: return "OPERATOR";
+        case TokenType::Separator: return "SEPARATOR";
         case TokenType::Invalid: return "INVALID";
         case TokenType::EndOfFile: return "EOF";
     }
@@ -180,6 +182,47 @@ Token Lexer::scan_quoted_literal(char quote, TokenType token_type) {
     return make_token(TokenType::Invalid, start, location);
 }
 
+Token Lexer::scan_symbol() {
+    const std::size_t start = index_;
+    const SourceLocation location{filename_, line_, column_};
+    const char first = advance();
+
+    if ((first == '+' && current() == '+') || (first == '-' && current() == '-') ||
+        (first == '=' && current() == '=') || (first == '=' && current() == '<') ||
+        (first == '<' && current() == '=') || (first == '>' && current() == '=') ||
+        (first == '!' && current() == '=') || (first == '&' && current() == '&') ||
+        (first == '|' && current() == '|')) {
+        advance();
+        return make_token(TokenType::Operator, start, location);
+    }
+
+    switch (first) {
+        case '+':
+        case '-':
+        case '*':
+        case '/':
+        case '%':
+        case '^':
+        case '!':
+        case '<':
+        case '>':
+        case '=':
+            return make_token(TokenType::Operator, start, location);
+        case '(':
+        case ')':
+        case '[':
+        case ']':
+        case '{':
+        case '}':
+        case ',':
+        case ';':
+        case ':':
+            return make_token(TokenType::Separator, start, location);
+        default:
+            return make_token(TokenType::Invalid, start, location);
+    }
+}
+
 Token Lexer::make_token(TokenType type, std::size_t start, SourceLocation location) const {
     return Token{type, source_.substr(start, index_ - start), std::move(location)};
 }
@@ -196,8 +239,6 @@ std::vector<Token> Lexer::scan_all() {
             break;
         }
 
-        const std::size_t start = index_;
-        const SourceLocation location{filename_, line_, column_};
         if (is_identifier_start(current())) {
             tokens.push_back(scan_identifier_or_keyword());
         } else if (is_digit(current())) {
@@ -207,8 +248,7 @@ std::vector<Token> Lexer::scan_all() {
         } else if (current() == '\'') {
             tokens.push_back(scan_quoted_literal('\'', TokenType::CharacterLiteral));
         } else {
-            advance();
-            tokens.push_back(make_token(TokenType::Invalid, start, location));
+            tokens.push_back(scan_symbol());
         }
     }
 

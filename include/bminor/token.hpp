@@ -11,6 +11,8 @@ namespace bminor {
         IntegerLiteral,
         StringLiteral,
         CharacterLiteral,
+        Operator,
+        Separator,
         Invalid,
         EndOfFile
     };

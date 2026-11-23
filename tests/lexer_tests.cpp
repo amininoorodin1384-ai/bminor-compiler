@@ -83,6 +83,32 @@ void test_invalid_and_overlong_literals() {
             "string longer than 256 characters is invalid");
 }
 
+void test_operators_separators_and_maximal_munch() {
+    bminor::Lexer lexer(R"(++ + -- - <= =< < >= > == = != ! && || * / % ^ ( ) [ ] { } , ; :)",
+                       "symbols.bm");
+    const std::vector<bminor::Token> tokens = lexer.scan_all();
+    const std::vector<std::string> expected_lexemes = {
+        "++", "+", "--", "-", "<=", "=<", "<", ">=", ">", "==", "=", "!=", "!",
+        "&&", "||", "*", "/", "%", "^", "(", ")", "[", "]", "{", "}", ",", ";", ":"
+    };
+
+    require(tokens.size() == expected_lexemes.size() + 1, "symbol token count");
+    for (std::size_t i = 0; i < expected_lexemes.size(); ++i) {
+        require(tokens[i].lexeme == expected_lexemes[i], "symbol longest-match lexeme");
+        if (i < 19) {
+            require(tokens[i].type == bminor::TokenType::Operator, "operator token type");
+        } else {
+            require(tokens[i].type == bminor::TokenType::Separator, "separator token type");
+        }
+    }
+    require(tokens.back().type == bminor::TokenType::EndOfFile, "EOF follows symbols");
+
+    bminor::Lexer invalid_symbols("& |", "invalid-symbols.bm");
+    const std::vector<bminor::Token> invalid_tokens = invalid_symbols.scan_all();
+    require(invalid_tokens[0].type == bminor::TokenType::Invalid, "single ampersand is invalid");
+    require(invalid_tokens[1].type == bminor::TokenType::Invalid, "single vertical bar is invalid");
+}
+
 }
 
 int main() {
@@ -91,6 +117,7 @@ int main() {
     test_invalid_character_and_unterminated_comment();
     test_number_and_quoted_literals();
     test_invalid_and_overlong_literals();
+    test_operators_separators_and_maximal_munch();
     std::cout << "Lexer tests passed.\n";
     return 0;
 }

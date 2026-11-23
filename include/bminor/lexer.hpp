@@ -22,6 +22,7 @@ namespace bminor {
         Token scan_identifier_or_keyword();
         Token scan_number();
         Token scan_quoted_literal(char quote, TokenType token_type);
+        Token scan_symbol();
         Token make_token(TokenType type, std::size_t start, SourceLocation location) const;
 
         std::string source_;
