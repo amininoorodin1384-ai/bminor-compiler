@@ -5,7 +5,7 @@
 ## وضعیت فعلی
 
 - Lexer شناسه‌ها، کلیدواژه‌ها، فاصله‌ها، commentها، اعداد صحیح، رشته‌ها، کاراکترها، عملگرها و جداکننده‌ها را شناسایی می‌کند.
-- اجرای `bminor --tokens <source-file>` توکن‌ها را همراه با موقعیت منبع نمایش می‌دهد.
+- اجرای `bminor --tokens <source-file>` توکن‌ها را با موقعیت منبع نمایش می‌دهد؛ `bminor --parse <source-file>` برنامه را parse می‌کند، خطاها را گزارش می‌دهد و AST را چاپ می‌کند.
 - آزمون‌های فعلی در `tests/lexer_tests.cpp` هستند.
 - Parser بازگشتی نزولی اکنون عبارت‌ها، اعلان‌های متغیر/تابع، prototypeها، بلوک‌ها و statementهای اصلی را به AST تبدیل می‌کند.
 - بازیابی panic-mode پایه پیاده‌سازی شده است؛ highlighter هنوز باقی است.
@@ -17,6 +17,7 @@ cmake -S . -B build
 cmake --build build
 ./build/bminor --help
 ./build/bminor --tokens tests/lexer-smoke.bm
+./build/bminor --parse tests/program-smoke.bm
 ```
 
 در CLion، پروژه را از پوشه‌ای باز کن که `CMakeLists.txt` در آن قرار دارد. برای اجرای آزمون‌ها، هدف `bminor_tests` را انتخاب کن.

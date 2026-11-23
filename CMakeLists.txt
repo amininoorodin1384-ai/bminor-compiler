@@ -42,3 +42,5 @@ enable_testing()
 add_test(NAME lexer_tests COMMAND bminor_tests)
 add_test(NAME parser_expression_tests COMMAND bminor_parser_tests)
 add_test(NAME cli_help COMMAND bminor --help)
+add_test(NAME cli_parse_smoke
+        COMMAND bminor --parse "${CMAKE_CURRENT_SOURCE_DIR}/tests/program-smoke.bm")
