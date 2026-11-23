@@ -51,12 +51,46 @@ void test_invalid_character_and_unterminated_comment() {
     require(comment_tokens.back().type == bminor::TokenType::EndOfFile, "EOF follows comment error");
 }
 
+void test_number_and_quoted_literals() {
+    bminor::Lexer lexer("42 \"hello\\n\" 'q' '\\0'", "literals.bm");
+    const std::vector<bminor::Token> tokens = lexer.scan_all();
+
+    require(tokens.size() == 5, "literal token count");
+    require(tokens[0].type == bminor::TokenType::IntegerLiteral, "integer literal token");
+    require(tokens[0].lexeme == "42", "integer lexeme is preserved");
+    require(tokens[1].type == bminor::TokenType::StringLiteral, "string literal token");
+    require(tokens[1].lexeme == "\"hello\\n\"", "string escape remains in lexeme");
+    require(tokens[2].type == bminor::TokenType::CharacterLiteral, "character literal token");
+    require(tokens[3].type == bminor::TokenType::CharacterLiteral, "escaped character literal token");
+    require(tokens[4].type == bminor::TokenType::EndOfFile, "EOF follows literals");
+}
+
+void test_invalid_and_overlong_literals() {
+    bminor::Lexer invalid_chars("'' 'ab' \"open", "bad-literals.bm");
+    const std::vector<bminor::Token> invalid_tokens = invalid_chars.scan_all();
+    require(invalid_tokens[0].type == bminor::TokenType::Invalid, "empty character literal is invalid");
+    require(invalid_tokens[1].type == bminor::TokenType::Invalid, "multi-character literal is invalid");
+    require(invalid_tokens[2].type == bminor::TokenType::Invalid, "unterminated string is invalid");
+
+    const std::string long_identifier(257, 'a');
+    bminor::Lexer identifier_lexer(long_identifier, "long-name.bm");
+    require(identifier_lexer.scan_all()[0].type == bminor::TokenType::Invalid,
+            "identifier longer than 256 characters is invalid");
+
+    const std::string long_string = "\"" + std::string(257, 'b') + "\"";
+    bminor::Lexer string_lexer(long_string, "long-string.bm");
+    require(string_lexer.scan_all()[0].type == bminor::TokenType::Invalid,
+            "string longer than 256 characters is invalid");
+}
+
 }
 
 int main() {
     test_identifiers_and_keywords();
     test_whitespace_and_comments();
     test_invalid_character_and_unterminated_comment();
+    test_number_and_quoted_literals();
+    test_invalid_and_overlong_literals();
     std::cout << "Lexer tests passed.\n";
     return 0;
 }
