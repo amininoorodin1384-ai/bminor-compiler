@@ -1,3 +1,4 @@
+#include "bminor/ast.hpp"
 #include "bminor/lexer.hpp"
 
 #include <cstdlib>
@@ -109,6 +110,26 @@ void test_operators_separators_and_maximal_munch() {
     require(invalid_tokens[1].type == bminor::TokenType::Invalid, "single vertical bar is invalid");
 }
 
+void test_ast_node_foundation() {
+    const bminor::SourceLocation expression_location{"tree.bm", 3, 5};
+    bminor::AstNodePtr expression = bminor::make_ast_node(
+        bminor::AstKind::BinaryExpression, expression_location, "+");
+    expression->children.push_back(bminor::make_ast_node(
+        bminor::AstKind::NameExpression, {"tree.bm", 3, 5}, "x"));
+    expression->children.push_back(bminor::make_ast_node(
+        bminor::AstKind::IntegerLiteral, {"tree.bm", 3, 9}, "2"));
+
+    require(expression->kind == bminor::AstKind::BinaryExpression, "AST internal node kind");
+    require(expression->children.size() == 2, "binary AST node has two children");
+    require(expression->location.line == 3 && expression->location.column == 5,
+            "AST node source location");
+    require(!expression->type_annotation.has_value(), "AST type annotation starts empty");
+    require(expression->children[0]->kind == bminor::AstKind::NameExpression,
+            "AST leaf node kind");
+    require(std::string(bminor::ast_kind_name(expression->kind)) == "BinaryExpression",
+            "AST kind name");
+}
+
 }
 
 int main() {
@@ -118,6 +139,7 @@ int main() {
     test_number_and_quoted_literals();
     test_invalid_and_overlong_literals();
     test_operators_separators_and_maximal_munch();
-    std::cout << "Lexer tests passed.\n";
+    test_ast_node_foundation();
+    std::cout << "Front-end tests passed.\n";
     return 0;
 }

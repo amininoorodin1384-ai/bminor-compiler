@@ -7,7 +7,7 @@
 - Lexer شناسه‌ها، کلیدواژه‌ها، فاصله‌ها، commentها، اعداد صحیح، رشته‌ها، کاراکترها، عملگرها و جداکننده‌ها را شناسایی می‌کند.
 - اجرای `bminor --tokens <source-file>` توکن‌ها را همراه با موقعیت منبع نمایش می‌دهد.
 - آزمون‌های فعلی در `tests/lexer_tests.cpp` هستند.
-- Parser، AST، بازیابی خطای نحوی و highlighter هنوز باید پیاده‌سازی شوند.
+- مدل پایهٔ AST با موقعیت منبع و فیلد نوع اختیاری آماده است؛ Parser، بازیابی خطای نحوی و highlighter هنوز پیاده‌سازی نشده‌اند.
 
 ## ساخت و اجرا
 
@@ -129,4 +129,4 @@ primary_expression        ::= IDENTIFIER
 - The explicit `=<` spelling is accepted as an alias for the reference's `<=` operator.
 - Array variables use a fixed integer size; array parameters use `[]` without a size.
 - A complete program's required `main` function, constant-only global initialization, and type compatibility are semantic checks, not grammar productions.
-- The grammar has not yet been connected to a Parser or AST. It is the approved syntax draft for the next implementation step.
+- The AST foundation now exists: every node stores its kind, source location, a value string, child nodes, and an optional type annotation that starts empty. The grammar has not yet been connected to a Parser.
